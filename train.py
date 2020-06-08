@@ -9,6 +9,9 @@ import time
 import argparse
 import random
 
+from os import path
+import matplotlib.pyplot as plt
+
 from network import Net
 
 
@@ -62,6 +65,35 @@ class trainNetwork():
         return img_files
 
 
+    def divide_img(self, image, label):
+        image = np.expand_dims(image, axis=0)
+        label = np.expand_dims(label, axis=0)
+
+        images = np.zeros((1, self.b_size, self.b_size, 3))
+        labels = np.zeros((1, self.b_size, self.b_size, 3))
+
+        _, hei, wid, _ = image.shape
+        for h in range(0, hei, self.b_size):
+            for w in range(0, wid, self.b_size):
+                if h+self.b_size < hei:
+                    start_h, end_h = h, h+self.b_size
+                else:
+                    start_h, end_h = hei-self.b_size-1, hei-1
+                
+                if w+self.b_size < wid:
+                    start_w, end_w = w, w+self.b_size
+                else:
+                    start_w, end_w = wid-self.b_size-1, wid-1
+
+                temp_image = image[:, start_h:end_h, start_w:end_w, :]
+                temp_label = label[:, start_h:end_h, start_w:end_w, :]
+
+                images = np.concatenate((images, temp_image), axis=0)
+                labels = np.concatenate((labels, temp_label), axis=0)
+
+        return images, labels
+
+
     def load_data(self, img_names, label_names):
         assert len(img_names) == len(label_names)
 
@@ -71,28 +103,42 @@ class trainNetwork():
 
             images = np.zeros((1, self.b_size, self.b_size, 3))
             labels = np.zeros((1, self.b_size, self.b_size, 3))
+            hei, wid, _ = image.shape
 
-            image = np.expand_dims(image, axis=0)
-            label = np.expand_dims(label, axis=0)
+            temp_images, temp_labels = self.divide_img(image, label)
 
-            _, hei, wid, _ = image.shape
-            for h in range(0, hei, self.b_size):
-                for w in range(0, wid, self.b_size):
-                    if h+self.b_size < hei:
-                        start_h, end_h = h, h+self.b_size
-                    else:
-                        start_h, end_h = hei-self.b_size-1, hei-1
-                    
-                    if w+self.b_size < wid:
-                        start_w, end_w = w, w+self.b_size
-                    else:
-                        start_w, end_w = wid-self.b_size-1, wid-1
+            images = np.concatenate((images, temp_images), axis=0)
+            labels = np.concatenate((labels, temp_labels), axis=0)
 
-                    temp_image = image[:, start_h:end_h, start_w:end_w, :]
-                    temp_label = label[:, start_h:end_h, start_w:end_w, :]
+            if args.data_argument:
+                mat = cv2.getRotationMatrix2D((wid/2, hei/2), 90, 1)
+                arg_image = cv2.warpAffine(image, mat, (wid, hei))
+                arg_label = cv2.warpAffine(label, mat, (wid, hei))
 
-                    images = np.concatenate((images, temp_image), axis=0)
-                    labels = np.concatenate((labels, temp_label), axis=0)
+                temp_images, temp_labels = self.divide_img(arg_image, arg_label)
+
+                images = np.concatenate((images, temp_images), axis=0)
+                labels = np.concatenate((labels, temp_labels), axis=0)
+
+
+                mat = cv2.getRotationMatrix2D((wid/2, hei/2), 180, 1)
+                arg_image = cv2.warpAffine(image, mat, (wid, hei))
+                arg_label = cv2.warpAffine(label, mat, (wid, hei))
+
+                temp_images, temp_labels = self.divide_img(arg_image, arg_label)
+
+                images = np.concatenate((images, temp_images), axis=0)
+                labels = np.concatenate((labels, temp_labels), axis=0)
+
+
+                mat = cv2.getRotationMatrix2D((wid/2, hei/2), 270, 1)
+                arg_image = cv2.warpAffine(image, mat, (wid, hei))
+                arg_label = cv2.warpAffine(label, mat, (wid, hei))
+
+                temp_images, temp_labels = self.divide_img(arg_image, arg_label)
+
+                images = np.concatenate((images, temp_images), axis=0)
+                labels = np.concatenate((labels, temp_labels), axis=0)
 
         return images, labels
 
@@ -162,20 +208,27 @@ class trainNetwork():
 
     def train(self):
         file_lists = (self.list_files(self.input_path))
-        past_loss = 0
+        past_loss = 999
+
+        txt_file = self.save_path + '/epoch_loss.txt'
+        if path.exists(txt_file):
+            os.remove(txt_file)
+        f = open(txt_file, 'w')
 
         for epoch in range(self.n_epochs):
             np.random.shuffle(file_lists)
 
-            input_lists = file_lists[:int(len(file_lists)*0.9)]
-            val_input_lists = file_lists[int(len(file_lists)*0.9)+1:]
+            input_lists = file_lists[:int(len(file_lists)*0.7)]
+            val_input_lists = file_lists[int(len(file_lists)*0.7)+1:]
 
             start_time = time.time()
             train_loss = self.train_epoch(input_lists)
             val_loss = self.val_epoch(val_input_lists)
             end_time = time.time()
 
-            if past_loss < val_loss:
+            f.write(str(val_loss) + '\n')
+
+            if past_loss > val_loss:
                 torch.save(self.model.state_dict(), self.save_path + '/' + str(epoch+1) + '.pt')
                 past_loss = val_loss
 
@@ -185,7 +238,16 @@ class trainNetwork():
             print('Epoch: %02d | Epoch Time: %dm %ds' % (epoch+1, mins, secs))
             print('\tTrain Loss: %.3f | Val Loss: %.3f ' % (train_loss, val_loss))
 
+        txt_file = self.save_path + '/epoch_loss.txt'
+        if path.exists(txt_file):
+            with open(txt_file, 'r') as f:
+                lines = f.read().splitlines()
+                lines = list(map(float, lines))
 
+                plt.plot(lines)
+                plt.ylabel('losses')
+                plt.xlabel('epoch')
+                plt.savefig(self.save_path +'/epoch_result.png')
 
 def main():
     trainNetwork().train()
@@ -195,9 +257,10 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--train_path', type=str, default='/home/ny/pytorch_codes/Data')
+    parser.add_argument('--data_argument', type=bool, default=True)
 
-    parser.add_argument('--n_epochs', type=int, default=100)
-    parser.add_argument('--batch_num', type=int, default=1)
+    parser.add_argument('--n_epochs', type=int, default=200)
+    parser.add_argument('--batch_num', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--class_num', type=int, default=43)
     parser.add_argument('--l_r', type=float, default=10**(-4))

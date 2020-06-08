@@ -131,7 +131,6 @@ class testNetwork():
 
 def main():
     result = testNetwork().testOne('/home/ny/pytorch_codes/Data/test/1.png')
-    print(result.shape)
     cv2.imwrite('/home/ny/pytorch_codes/result.png', result)
 
 if __name__=='__main__':
@@ -139,7 +138,7 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--test_path', type=str, default='/home/ny/pytorch_codes/Data')
-    parser.add_argument('--weight', type=str, default='27.pt')
+    parser.add_argument('--weight', type=str, default='419.pt')
 
     parser.add_argument('--batch_num', type=int, default=1)
     parser.add_argument('--class_num', type=int, default=43)
